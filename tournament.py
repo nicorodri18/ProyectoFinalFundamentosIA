@@ -1,7 +1,11 @@
 from typing import Callable
+
 from connect4.dtos import Game, Match, Participant, Versus
 from connect4.connect_state import ConnectState
+from viewer import Connect4Viewer
+
 import numpy as np
+import pygame
 
 
 def next_power_of_two(n: int) -> int:
@@ -69,6 +73,8 @@ def play(
 
     games: list[Game] = []
 
+    viewer = Connect4Viewer()
+
     while a_wins < games_to_win and b_wins < games_to_win:
         total_games += 1
         # Decide who goes first based on the distribution
@@ -81,21 +87,42 @@ def play(
         first[1].mount()
         second[1].mount()
 
+        viewer.set_players(first[0], second[0])
+
         state = ConnectState()
         game_history: Game = Game()
 
         while not state.is_final():
-            _, current_policy = first if state.player == -1 else second
+            viewer.handle_events()
+
+            current_name, current_policy = first if state.player == -1 else second
+
+            viewer.show_message(f"Turn: {current_name}")
+            viewer.draw_board(state.board)
+            pygame.time.wait(400)
+
             action = current_policy.act(state.board)
             game_history.append((state.board.copy().tolist(), int(action)))
             state = state.transition(int(action))
 
+        viewer.draw_board(state.board)
+
+        winner = state.get_winner()
+        if winner == -1:
+            viewer.show_message(f"Winner: {first[0]}")
+        elif winner == 1:
+            viewer.show_message(f"Winner: {second[0]}")
+        else:
+            viewer.show_message("Draw")
+
+        pygame.time.wait(1500)
+
         games.append(game_history)
 
         # Determine winner
-        if state.get_winner() == -1:
+        if winner == -1:
             a_wins += 1
-        elif state.get_winner() == 1:
+        elif winner == 1:
             b_wins += 1
         else:
             draws += 1

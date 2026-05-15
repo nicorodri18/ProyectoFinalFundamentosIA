@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.pyo
+.claude/
+test_vs_random.py
