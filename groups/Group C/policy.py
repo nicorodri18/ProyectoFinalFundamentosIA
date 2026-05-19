@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from connect4.policy import Policy
 
@@ -7,87 +8,155 @@ class OhYes(Policy):
     def mount(self, *args):
         pass
 
+    def moves(self, board):
+
+        valid = []
+
+        for c in range(7):
+            if board[0][c] == 0:
+                valid.append(c)
+
+        return valid
+
+    def play(self, board, col, piece):
+
+        temp = board.copy()
+
+        for r in range(5, -1, -1):
+
+            if temp[r][col] == 0:
+                temp[r][col] = piece
+                break
+
+        return temp
+
+    def winner(self, board, piece):
+
+        for r in range(6):
+            for c in range(4):
+
+                if (
+                    board[r][c] == piece and
+                    board[r][c + 1] == piece and
+                    board[r][c + 2] == piece and
+                    board[r][c + 3] == piece
+                ):
+                    return True
+
+        for r in range(3):
+            for c in range(7):
+
+                if (
+                    board[r][c] == piece and
+                    board[r + 1][c] == piece and
+                    board[r + 2][c] == piece and
+                    board[r + 3][c] == piece
+                ):
+                    return True
+
+        return False
+
+    def simulate(self, board, piece):
+
+        current = piece
+        temp = board.copy()
+
+        while True:
+
+            possible = self.moves(temp)
+
+            if len(possible) == 0:
+                return 0
+
+            move = int(np.random.choice(possible))
+
+            temp = self.play(temp, move, current)
+
+            if self.winner(temp, current):
+                return current
+
+            current *= -1
+
     def act(self, s):
 
-        posibles = []
+        simulations = 25
 
-        for i in range(7):
-            if s[0][i] == 0:
-                posibles.append(i)
+        possible = self.moves(s)
 
-        rojas = np.count_nonzero(s == -1)
-        amarillas = np.count_nonzero(s == 1)
+        red = np.count_nonzero(s == -1)
+        yellow = np.count_nonzero(s == 1)
 
-        if rojas <= amarillas:
-            ficha = -1
+        if red <= yellow:
+            piece = -1
         else:
-            ficha = 1
+            piece = 1
 
-        rival = -ficha
+        rival = -piece
 
-        for col in posibles:
+        for col in possible:
 
-            tablero = s.copy()
+            temp = self.play(s, col, piece)
 
-            for fila in range(5, -1, -1):
-                if tablero[fila][col] == 0:
-                    tablero[fila][col] = ficha
-                    break
+            if self.winner(temp, piece):
+                return col
 
-            for f in range(6):
-                for c in range(4):
+        for col in possible:
 
-                    if (
-                        tablero[f][c] == ficha and
-                        tablero[f][c + 1] == ficha and
-                        tablero[f][c + 2] == ficha and
-                        tablero[f][c + 3] == ficha
-                    ):
-                        return col
+            temp = self.play(s, col, rival)
 
-            for f in range(3):
-                for c in range(7):
+            if self.winner(temp, rival):
+                return col
 
-                    if (
-                        tablero[f][c] == ficha and
-                        tablero[f + 1][c] == ficha and
-                        tablero[f + 2][c] == ficha and
-                        tablero[f + 3][c] == ficha
-                    ):
-                        return col
+        wins = {}
+        visits = {}
 
-        for col in posibles:
+        for move in possible:
+            wins[move] = 1
+            visits[move] = 1
 
-            tablero = s.copy()
+        total = len(possible)
 
-            for fila in range(5, -1, -1):
-                if tablero[fila][col] == 0:
-                    tablero[fila][col] = rival
-                    break
+        for _ in range(simulations):
 
-            for f in range(6):
-                for c in range(4):
+            best = possible[0]
+            best_ucb = -999999
 
-                    if (
-                        tablero[f][c] == rival and
-                        tablero[f][c + 1] == rival and
-                        tablero[f][c + 2] == rival and
-                        tablero[f][c + 3] == rival
-                    ):
-                        return col
+            for move in possible:
 
-            for f in range(3):
-                for c in range(7):
+                value = wins[move] / visits[move]
 
-                    if (
-                        tablero[f][c] == rival and
-                        tablero[f + 1][c] == rival and
-                        tablero[f + 2][c] == rival and
-                        tablero[f + 3][c] == rival
-                    ):
-                        return col
+                exploration = math.sqrt(
+                    math.log(total) / visits[move]
+                )
 
-        if 3 in posibles:
-            return 3
+                ucb = value + 1.4 * exploration
 
-        return int(np.random.choice(posibles))
+                if ucb > best_ucb:
+                    best_ucb = ucb
+                    best = move
+
+            temp = self.play(s, best, piece)
+
+            result = self.simulate(temp, rival)
+
+            visits[best] += 1
+            total += 1
+
+            if result == piece:
+                wins[best] += 1
+
+            elif result == 0:
+                wins[best] += 0.5
+
+        best_move = possible[0]
+        best_score = -1
+
+        for move in possible:
+
+            score = wins[move] / visits[move]
+
+            if score > best_score:
+                best_score = score
+                best_move = move
+
+        return best_move
