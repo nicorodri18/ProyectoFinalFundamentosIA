@@ -32,8 +32,6 @@ class OhYes(Policy):
 
     def winner(self, board, piece):
 
-        # Horizontal
-
         for r in range(6):
             for c in range(4):
 
@@ -44,8 +42,6 @@ class OhYes(Policy):
                     board[r][c + 3] == piece
                 ):
                     return True
-
-        # Vertical
 
         for r in range(3):
             for c in range(7):
@@ -72,11 +68,7 @@ class OhYes(Policy):
             if len(possible) == 0:
                 return 0
 
-            # Prioridad al centro
-
-            possible.sort(key=lambda x: abs(3 - x))
-
-            move = int(np.random.choice(possible[:3]))
+            move = int(np.random.choice(possible))
 
             temp = self.play(temp, move, current)
 
@@ -87,13 +79,9 @@ class OhYes(Policy):
 
     def act(self, s):
 
-        simulations = 35
+        simulations = 25
 
         possible = self.moves(s)
-
-        # Prioridad al centro
-
-        possible.sort(key=lambda x: abs(3 - x))
 
         red = np.count_nonzero(s == -1)
         yellow = np.count_nonzero(s == 1)
@@ -105,16 +93,12 @@ class OhYes(Policy):
 
         rival = -piece
 
-        # Jugada ganadora inmediata
-
         for col in possible:
 
             temp = self.play(s, col, piece)
 
             if self.winner(temp, piece):
                 return col
-
-        # Bloquear rival
 
         for col in possible:
 
