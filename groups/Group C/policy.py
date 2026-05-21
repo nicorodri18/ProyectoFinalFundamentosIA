@@ -13,6 +13,7 @@ class OhYes(Policy):
         valid = []
 
         for c in range(7):
+
             if board[0][c] == 0:
                 valid.append(c)
 
@@ -60,9 +61,20 @@ class OhYes(Policy):
 
         return False
 
+    # Heurística sencilla:
+    # dar bonus al centro
+
+    def evaluate(self, col):
+
+        if col == 3:
+            return 0.2
+
+        return 0
+
     def simulate(self, board, piece):
 
         current = piece
+
         temp = board.copy()
 
         while True:
@@ -74,11 +86,19 @@ class OhYes(Policy):
 
             # Prioridad al centro
 
-            possible.sort(key=lambda x: abs(3 - x))
+            possible.sort(
+                key=lambda x: abs(3 - x)
+            )
 
-            move = int(np.random.choice(possible[:3]))
+            move = int(
+                np.random.choice(possible[:3])
+            )
 
-            temp = self.play(temp, move, current)
+            temp = self.play(
+                temp,
+                move,
+                current
+            )
 
             if self.winner(temp, current):
                 return current
@@ -93,7 +113,9 @@ class OhYes(Policy):
 
         # Prioridad al centro
 
-        possible.sort(key=lambda x: abs(3 - x))
+        possible.sort(
+            key=lambda x: abs(3 - x)
+        )
 
         red = np.count_nonzero(s == -1)
         yellow = np.count_nonzero(s == 1)
@@ -109,7 +131,11 @@ class OhYes(Policy):
 
         for col in possible:
 
-            temp = self.play(s, col, piece)
+            temp = self.play(
+                s,
+                col,
+                piece
+            )
 
             if self.winner(temp, piece):
                 return col
@@ -118,7 +144,11 @@ class OhYes(Policy):
 
         for col in possible:
 
-            temp = self.play(s, col, rival)
+            temp = self.play(
+                s,
+                col,
+                rival
+            )
 
             if self.winner(temp, rival):
                 return col
@@ -127,6 +157,7 @@ class OhYes(Policy):
         visits = {}
 
         for move in possible:
+
             wins[move] = 1
             visits[move] = 1
 
@@ -139,39 +170,62 @@ class OhYes(Policy):
 
             for move in possible:
 
-                value = wins[move] / visits[move]
-
-                exploration = math.sqrt(
-                    math.log(total) / visits[move]
+                value = (
+                    wins[move] /
+                    visits[move]
                 )
 
-                ucb = value + 1.4 * exploration
+                exploration = math.sqrt(
+                    math.log(total) /
+                    visits[move]
+                )
+
+                ucb = (
+                    value +
+                    1.4 * exploration
+                )
 
                 if ucb > best_ucb:
+
                     best_ucb = ucb
                     best = move
 
-            temp = self.play(s, best, piece)
+            temp = self.play(
+                s,
+                best,
+                piece
+            )
 
-            result = self.simulate(temp, rival)
+            result = self.simulate(
+                temp,
+                rival
+            )
 
             visits[best] += 1
             total += 1
 
+            bonus = self.evaluate(best)
+
             if result == piece:
-                wins[best] += 1
+
+                wins[best] += 1 + bonus
 
             elif result == 0:
-                wins[best] += 0.5
+
+                wins[best] += 0.5 + bonus
 
         best_move = possible[0]
         best_score = -1
 
         for move in possible:
 
-            score = wins[move] / visits[move]
+            score = (
+                wins[move] /
+                visits[move]
+            )
 
             if score > best_score:
+
                 best_score = score
                 best_move = move
 
