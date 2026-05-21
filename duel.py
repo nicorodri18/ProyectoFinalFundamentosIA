@@ -6,7 +6,7 @@ from connect4.connect_state import ConnectState
 
 spec_basic = importlib.util.spec_from_file_location(
     "basic",
-    "groups/Group C/policy_basic_backup.py"
+    "groups/Group C/policy_basic.py"
 )
 
 module_basic = importlib.util.module_from_spec(spec_basic)
@@ -28,45 +28,62 @@ spec_pro.loader.exec_module(module_pro)
 
 ProAgent = module_pro.OhYes
 
-# -------- INSTANCIAS --------
+# -------- RESULTADOS --------
 
-basic = BasicAgent()
-pro = ProAgent()
+basic_wins = 0
+pro_wins = 0
+draws = 0
 
-# -------- ESTADO --------
+# -------- 10 PARTIDAS --------
 
-state = ConnectState()
+for game in range(10):
 
-turn = -1
+    basic = BasicAgent()
+    pro = ProAgent()
 
-# -------- PARTIDA --------
+    state = ConnectState()
 
-while True:
+    turn = -1
 
-    board = state.board
+    while True:
 
-    if turn == -1:
+        board = state.board
 
-        move = basic.act(board)
+        if turn == -1:
 
-        print("\nBASIC juega:", move)
+            move = basic.act(board)
 
-    else:
+        else:
 
-        move = pro.act(board)
+            move = pro.act(board)
 
-        print("\nPRO juega:", move)
+        state = state.transition(move)
 
-    state = state.transition(move)
+        if state.is_final():
 
-    print(state.board)
+            winner = state.get_winner()
 
-    if state.is_final():
+            if winner == -1:
+                basic_wins += 1
 
-        winner = state.get_winner()
+            elif winner == 1:
+                pro_wins += 1
 
-        print("\nGanador:", winner)
+            else:
+                draws += 1
 
-        break
+            print(f"Partida {game + 1}: ganador -> {winner}")
 
-    turn *= -1
+            break
+
+        turn *= -1
+
+# -------- RESULTADOS FINALES --------
+
+print("\nRESULTADOS FINALES")
+
+print("Basic wins:", basic_wins)
+
+print("Pro wins:", pro_wins)
+
+print("Empates:", draws)
