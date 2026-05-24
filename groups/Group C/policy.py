@@ -59,6 +59,32 @@ class OhYes(Policy):
                 ):
                     return True
 
+        # Diagonal positiva
+
+        for r in range(3):
+            for c in range(4):
+
+                if (
+                    board[r][c] == piece and
+                    board[r + 1][c + 1] == piece and
+                    board[r + 2][c + 2] == piece and
+                    board[r + 3][c + 3] == piece
+                ):
+                    return True
+
+        # Diagonal negativa
+
+        for r in range(3, 6):
+            for c in range(4):
+
+                if (
+                    board[r][c] == piece and
+                    board[r - 1][c + 1] == piece and
+                    board[r - 2][c + 2] == piece and
+                    board[r - 3][c + 3] == piece
+                ):
+                    return True
+
         return False
 
     # Heurística sencilla:
