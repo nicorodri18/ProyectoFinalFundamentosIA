@@ -4,6 +4,7 @@ from typing import Optional
 from connect4.policy import Policy
 from connect4.connect_state import ConnectState
 
+
 class MCTSNode:
     __slots__ = ("state", "parent", "action", "children",
                  "value", "visits", "untried")
@@ -22,7 +23,6 @@ class MCTSNode:
         )
 
     def ucb1(self, c: float) -> float:
-        """UCB1: explota (value/visits) + explora (sqrt(log N / n))"""
         if self.visits == 0:
             return float("inf")
         return self.value / self.visits + c * math.sqrt(
@@ -39,22 +39,51 @@ class MCTSNode:
         self.children.append(child)
         return child
 
+
+def _forced_col(state: ConnectState) -> Optional[int]:
+    for col in state.get_free_cols():
+        if state.transition(col).get_winner() == state.player:
+            return col
+    opp = ConnectState(state.board, -state.player)
+    for col in opp.get_free_cols():
+        if opp.transition(col).get_winner() == opp.player:
+            return col
+    return None
+
+
 def _rollout(state: ConnectState, root_player: int,
              rng: np.random.Generator) -> float:
     cur = state
+    depth = 0
     while not cur.is_final():
+        # aplicar heurística en primeros movimientos del rollout
+        if depth < 4:
+            forced = _forced_col(cur)
+            if forced is not None:
+                cur = cur.transition(forced)
+                depth += 1
+                continue
         col = int(rng.choice(cur.get_free_cols()))
         cur = cur.transition(col)
+        depth += 1
     w = cur.get_winner()
     if w == 0:
         return 0.0
     return 1.0 if w == root_player else -1.0
 
 
+def _center_prior(cols: list[int]) -> list[int]:
+    center = 3
+    return sorted(cols, key=lambda c: abs(c - center))
+
+
 def _mcts(root_state: ConnectState, n_sims: int, c: float,
           rng: np.random.Generator) -> int:
     root_player = root_state.player
     root = MCTSNode(root_state)
+
+    # ordenar untried por cercanía al centro
+    root.untried = _center_prior(root.untried)
 
     for _ in range(n_sims):
         node = root
@@ -69,30 +98,25 @@ def _mcts(root_state: ConnectState, n_sims: int, c: float,
         cur = node
         while cur is not None:
             cur.visits += 1
-            cur.value += result
+            # backprop desde perspectiva del jugador en cada nodo
+            if cur.parent is not None:
+                perspective = cur.parent.state.player
+                cur.value += result if perspective == root_player else -result
+            else:
+                cur.value += result
             cur = cur.parent
 
     if not root.children:
-        return int(rng.choice(root_state.get_free_cols()))
+        cols = _center_prior(root_state.get_free_cols())
+        return cols[0]
 
     return max(root.children, key=lambda ch: ch.visits).action
 
-def _forced_move(state: ConnectState) -> Optional[int]:
-    if state.is_final():
-        return None
-    for col in state.get_free_cols():
-        if state.transition(col).get_winner() == state.player:
-            return col
-    opp = ConnectState(state.board, -state.player)
-    for col in opp.get_free_cols():
-        if opp.transition(col).get_winner() == opp.player:
-            return col
-    return None
 
 class MCTSAgent(Policy):
     def __init__(
         self,
-        n_simulations: int = 500,
+        n_simulations: int = 800,
         c: float = math.sqrt(2),
         use_heuristic: bool = True,
         seed: Optional[int] = None,
@@ -104,7 +128,6 @@ class MCTSAgent(Policy):
         self._rng: Optional[np.random.Generator] = None
 
     def mount(self, timeout: float = None) -> None:
-        """Inicializa el RNG antes de cada partida. Acepta timeout opcional del autograder."""
         s = self.seed if self.seed is not None else int(np.random.randint(0, 2**30))
         self._rng = np.random.default_rng(s)
 
@@ -123,7 +146,7 @@ class MCTSAgent(Policy):
             return 0
 
         if self.use_heuristic:
-            forced = _forced_move(state)
+            forced = _forced_col(state)
             if forced is not None:
                 return forced
 
