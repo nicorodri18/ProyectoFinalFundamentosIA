@@ -6,14 +6,14 @@ from connect4.connect_state import ConnectState
 
 spec_basic = importlib.util.spec_from_file_location(
     "basic",
-    "groups/Group C/policy_basic.py"
+    "groups/Group C/backup_basic.py"
 )
 
 module_basic = importlib.util.module_from_spec(spec_basic)
 
 spec_basic.loader.exec_module(module_basic)
 
-BasicAgent = module_basic.OhYes
+BasicAgent = module_basic.Nicrack
 
 # -------- PRO --------
 
@@ -26,7 +26,7 @@ module_pro = importlib.util.module_from_spec(spec_pro)
 
 spec_pro.loader.exec_module(module_pro)
 
-ProAgent = module_pro.OhYes
+ProAgent = module_pro.Nicrack
 
 # -------- RESULTADOS --------
 
@@ -39,6 +39,7 @@ draws = 0
 for game in range(10):
 
     basic = BasicAgent()
+
     pro = ProAgent()
 
     state = ConnectState()
@@ -64,12 +65,15 @@ for game in range(10):
             winner = state.get_winner()
 
             if winner == -1:
+
                 basic_wins += 1
 
             elif winner == 1:
+
                 pro_wins += 1
 
             else:
+
                 draws += 1
 
             print(f"Partida {game + 1}: ganador -> {winner}")

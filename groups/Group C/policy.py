@@ -3,7 +3,7 @@ import numpy as np
 from connect4.policy import Policy
 
 
-class OhYes(Policy):
+class Nicrack(Policy):
 
     def mount(self, *args):
         pass
@@ -133,7 +133,7 @@ class OhYes(Policy):
 
     def act(self, s):
 
-        simulations = 35
+        simulations = getattr(self, "simulations", 35)
 
         possible = self.moves(s)
 
