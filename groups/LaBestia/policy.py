@@ -1,46 +1,18 @@
 import numpy as np
-import math
 from typing import Optional
 from connect4.policy import Policy
 from connect4.connect_state import ConnectState
 
-
-class MCTSNode:
-    __slots__ = ("state", "parent", "action", "children",
-                 "value", "visits", "untried")
-
-    def __init__(self, state: ConnectState,
-                 parent: Optional["MCTSNode"] = None,
-                 action: Optional[int] = None):
-        self.state = state
-        self.parent = parent
-        self.action = action
-        self.children: list["MCTSNode"] = []
-        self.value = 0.0
-        self.visits = 0
-        self.untried: list[int] = (
-            list(state.get_free_cols()) if not state.is_final() else []
-        )
-
-    def ucb1(self, c: float) -> float:
-        if self.visits == 0:
-            return float("inf")
-        return self.value / self.visits + c * math.sqrt(
-            math.log(self.parent.visits) / self.visits
-        )
-
-    def best_child(self, c: float) -> "MCTSNode":
-        return max(self.children, key=lambda ch: ch.ucb1(c))
-
-    def expand(self, rng: np.random.Generator) -> "MCTSNode":
-        idx = int(rng.integers(len(self.untried)))
-        col = self.untried.pop(idx)
-        child = MCTSNode(self.state.transition(col), parent=self, action=col)
-        self.children.append(child)
-        return child
-
+COL_WEIGHTS = np.array([0.1, 0.2, 0.4, 0.7, 0.4, 0.2, 0.1])
 
 def _forced_col(state: ConnectState) -> Optional[int]:
+    """
+    Heurística táctica 1-ply:
+    1. Gana inmediatamente si puede
+    2. Bloquea victoria inmediata del oponente
+    """
+    if state.is_final():
+        return None
     for col in state.get_free_cols():
         if state.transition(col).get_winner() == state.player:
             return col
@@ -50,79 +22,105 @@ def _forced_col(state: ConnectState) -> Optional[int]:
             return col
     return None
 
-
 def _rollout(state: ConnectState, root_player: int,
-             rng: np.random.Generator) -> float:
+             rng: np.random.Generator, max_depth: int) -> float:
+    """
+    Simulación heurística hasta profundidad máxima.
+
+    Durante el rollout las jugadas se seleccionan ponderando por
+    posición estratégica (columnas centrales tienen más peso),
+    sin recurrir a búsqueda 1-ply en cada paso para mantener velocidad.
+
+    Si se alcanza el terminal: retorna +1/-1/0.
+    Si se alcanza max_depth: evalúa el tablero posicionalmente.
+    """
     cur = state
-    depth = 0
-    while not cur.is_final():
-        # aplicar heurística en primeros movimientos del rollout
-        if depth < 4:
-            forced = _forced_col(cur)
-            if forced is not None:
-                cur = cur.transition(forced)
-                depth += 1
-                continue
-        col = int(rng.choice(cur.get_free_cols()))
+    for _ in range(max_depth):
+        if cur.is_final():
+            break
+        free = cur.get_free_cols()
+        weights = COL_WEIGHTS[free]
+        weights = weights / weights.sum()
+        col = int(rng.choice(free, p=weights))
         cur = cur.transition(col)
-        depth += 1
-    w = cur.get_winner()
-    if w == 0:
-        return 0.0
-    return 1.0 if w == root_player else -1.0
 
+    if cur.is_final():
+        w = cur.get_winner()
+        if w == 0:
+            return 0.0
+        return 1.0 if w == root_player else -1.0
 
-def _center_prior(cols: list[int]) -> list[int]:
-    center = 3
-    return sorted(cols, key=lambda c: abs(c - center))
+    board = cur.board
+    score = float(np.sum(
+        (board == root_player).astype(float) * COL_WEIGHTS[np.newaxis, :] -
+        (board == -root_player).astype(float) * COL_WEIGHTS[np.newaxis, :]
+    ))
+    return float(np.tanh(score))
 
+def _flat_monte_carlo(state: ConnectState, n_sims: int,
+                      max_depth: int, rng: np.random.Generator) -> int:
+    """
+    Flat Monte Carlo con rollouts heurísticos posicionales.
 
-def _mcts(root_state: ConnectState, n_sims: int, c: float,
-          rng: np.random.Generator) -> int:
-    root_player = root_state.player
-    root = MCTSNode(root_state)
+    Evalúa cada columna válida ejecutando n_sims/n_cols simulaciones
+    y selecciona la de mayor puntuación promedio.
 
-    # ordenar untried por cercanía al centro
-    root.untried = _center_prior(root.untried)
+    No usa árbol de búsqueda ni UCB — evaluación plana e independiente
+    por columna candidata.
+    """
+    root_player = state.player
+    free = state.get_free_cols()
+    sims_per_col = max(1, n_sims // len(free))
 
-    for _ in range(n_sims):
-        node = root
-        while not node.untried and not node.state.is_final():
-            node = node.best_child(c)
+    best_col = free[0]
+    best_avg = -float('inf')
 
-        if node.untried and not node.state.is_final():
-            node = node.expand(rng)
+    for col in free:
+        next_state = state.transition(col)
+        if next_state.get_winner() == root_player:
+            return col
+        total = sum(
+            _rollout(next_state, root_player, rng, max_depth)
+            for _ in range(sims_per_col)
+        )
+        avg = total / sims_per_col
+        if avg > best_avg:
+            best_avg = avg
+            best_col = col
 
-        result = _rollout(node.state, root_player, rng)
+    return best_col
 
-        cur = node
-        while cur is not None:
-            cur.visits += 1
-            # backprop desde perspectiva del jugador en cada nodo
-            if cur.parent is not None:
-                perspective = cur.parent.state.player
-                cur.value += result if perspective == root_player else -result
-            else:
-                cur.value += result
-            cur = cur.parent
+class FlatMCTSAgent(Policy):
+    """
+    Agente Connect-4: Flat Monte Carlo con rollouts heurísticos posicionales.
 
-    if not root.children:
-        cols = _center_prior(root_state.get_free_cols())
-        return cols[0]
+    Diferencias clave vs MCTS clásico:
+    - Sin árbol (no hay nodos, expansión ni backpropagation)
+    - Sin UCB (no hay balance exploración/explotación matemático)
+    - Rollouts ponderados por posición estratégica del tablero
+    - Profundidad limitada con evaluación posicional al corte
 
-    return max(root.children, key=lambda ch: ch.visits).action
+    Parámetros
+    ----------
+    n_simulations : int
+        Total de simulaciones repartidas entre columnas válidas.
+    max_depth : int
+        Profundidad máxima de cada rollout.
+    use_heuristic : bool
+        Detecta victorias/bloqueos inmediatos antes de simular.
+    seed : int or None
+        Semilla para reproducibilidad.
+    """
 
-
-class MCTSAgent(Policy):
     def __init__(
         self,
-        n_simulations: int = 800,
-        c: float = math.sqrt(2),
+        n_simulations: int = 500,
+        max_depth: int = 8,
         use_heuristic: bool = True,
         seed: Optional[int] = None,
     ):
         self.n_simulations = n_simulations
-        self.c = c
+        self.max_depth = max_depth
         self.use_heuristic = use_heuristic
         self.seed = seed
         self._rng: Optional[np.random.Generator] = None
@@ -150,4 +148,5 @@ class MCTSAgent(Policy):
             if forced is not None:
                 return forced
 
-        return _mcts(state, self.n_simulations, self.c, self._rng)
+        return _flat_monte_carlo(state, self.n_simulations,
+                                 self.max_depth, self._rng)
